@@ -31,7 +31,8 @@ void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
     int ret = ldacBT_init_handle_encode(h, 679, eqmid, LDACBT_CHANNEL_MODE_STEREO, LDACBT_SMPL_FMT_F32, info->samplerate);
     if( ret < 0 )
     {
-        printf("ldacBT_init_handler_encode failed! error code %d\n", ldacBT_get_error_code( h ) );
+        fprintf(stderr, "ldacBT_init_handler_encode failed! error code %d\n", ldacBT_get_error_code( h ) );
+		free(pcmSamples);
         return;
     }
     size_t frameCount = 0;
@@ -56,14 +57,14 @@ void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
         int error = ldacBT_encode(h, buf, &pcm_used, ldacFrame, &ldac_stream_size, &ldac_frame_num);
         if( error < 0 )
         {
-            printf("ldacBT_encode failed : %d\n", ldacBT_get_error_code( h ) );
+            fprintf(stderr, "ldacBT_encode failed : %d\n", ldacBT_get_error_code( h ) );
             break;
         }
         if( ldac_stream_size > 0 )
             fwrite( ldacFrame, ldac_stream_size, 1, out );
         
     }
-    printf("done.\n");
+    fprintf(stderr, "done.\n");
     ldacBT_close_handle(h);
 }
 
@@ -109,7 +110,7 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
     int ret = ldacBT_init_handle_encode(h, 679, eqmid, LDACBT_CHANNEL_MODE_STEREO, LDACBT_SMPL_FMT_F32, new_sample_rate);
     if( ret < 0 )
     {
-        printf("ldacBT_init_handler_encode failed! error code %d\n", ldacBT_get_error_code( h ) );
+        fprintf(stderr, "ldacBT_init_handler_encode failed! error code %d\n", ldacBT_get_error_code( h ) );
         return;
     }
 
@@ -135,7 +136,7 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
         /* Terminate if done. */
 		if( ptrOut == NULL )
         {
-            printf("done.\n");
+            fprintf(stderr, "done.\n");
             break;
         }
 
@@ -153,9 +154,9 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
             /* The last read will not be a full buffer, so snd_of_input. */
             if (src_data.input_frames < bufFrames)
                 src_data.end_of_input = SF_TRUE;
-            printf("%3.0f%%", (float)frameCount/info->frames*100.f );
+            fprintf(stderr, "%3.0f%%", (float)frameCount/info->frames*100.f );
             fflush( stdout );
-            printf("\b\b\b\b");
+            fprintf(stderr, "\b\b\b\b");
         }
 		if ((error = src_process (src_state, &src_data)))
 		{	
@@ -178,7 +179,7 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
         error = ldacBT_encode(h, ptrOut, &pcm_used, ldacFrame, &ldac_stream_size, &ldac_frame_num);
         if( error < 0 )
         {
-            printf("ldacBT_encode failed : %d\n", ldacBT_get_error_code( h ) );
+            fprintf(stderr, "ldacBT_encode failed : %d\n", ldacBT_get_error_code( h ) );
             break;
         }
         if( ldac_stream_size > 0 )
@@ -196,12 +197,13 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
 }
 
 
-static char short_options[] = "hr:q:v";
+static char short_options[] = "hr:q:o:v";
 
 static struct option long_options[] = {
     {"help",        no_argument,        NULL,   'h'},
     {"rate",        required_argument,  NULL,   'r'},
     {"eqmi",        required_argument,  NULL,   'q'},
+    {"output",      required_argument,  NULL,   'o'},
     {"version",     no_argument,        NULL,   'v'},
 
     {0, 0, 0, 0}
@@ -211,6 +213,7 @@ static char *help_options[] = {
     "print (this) help.",
     "sample rate of encoded stream",
     "encode quality mode index",
+    "output file name (- for stdout)",
     "print version",
 };
 
@@ -286,32 +289,33 @@ static void strip_ext( char *fname )
 
 static void printVersion()
 {
-    printf("ldacenc %s\n", VERSION );
+    fprintf(stderr, "ldacenc %s\n", VERSION );
 }
 
 static void usage( char *progName )
 {
     int i;
     printVersion();
-    printf( "\nusage:\n" );
-    printf( "%s [options] <filename>\n\n", progName );
+    fprintf(stderr,  "\nusage:\n" );
+    fprintf(stderr,  "%s [options] <filename>\n\n", progName );
     for( i=0; long_options[i].name != 0; i++)
     {
-        printf("--%s|-%c\t\t%s\n", long_options[i].name, long_options[i].val, help_options[i] );
+        fprintf(stderr, "--%s|-%c\t\t%s\n", long_options[i].name, long_options[i].val, help_options[i] );
     }
 
-    printf("\nsupported sample rates: ");
+    fprintf(stderr, "\nsupported sample rates: ");
     for( size_t i=0; i<sizeof(sampleRates)/sizeof(int); ++i )
     {
-        printf("%d ", sampleRates[i] );
+        fprintf(stderr, "%d ", sampleRates[i] );
     }
-    printf("\n");
+    fprintf(stderr, "\n");
 }
 
 int main( int argc, char *args[] )
 {
     int sampleRate = -1;
     int eqmi = LDACBT_EQMID_HQ;
+	char output[255] = { 0 };
 
     int c;
     while( (c = getopt_long( argc, args, short_options, long_options, NULL )) > 0 )
@@ -322,13 +326,14 @@ int main( int argc, char *args[] )
                 sampleRate = atoi(optarg);
                 if( !sampleRateSupported( sampleRate ) )
                 {
-                    printf("invalid sample rate!\n");
+                    fprintf(stderr, "invalid sample rate!\n");
                     usage( args[0] );
                     return EXIT_FAILURE;
                 }
                 break;
 
             case 'q':
+				fprintf(stderr, "encode quality mode index: %s\n", optarg);
                 eqmi = atoi(optarg);
                 if( !eqmiSupported( eqmi ) )
                 {
@@ -342,6 +347,10 @@ int main( int argc, char *args[] )
                 printVersion();
                 break;
             
+            case 'o':
+                strcpy(output, optarg);
+                break;
+
             case '?':
             case 'h':
             default:
@@ -352,29 +361,43 @@ int main( int argc, char *args[] )
 
     if( optind < argc )
     {
-        printf("current settings:\n");
-        printf("sample rate: %d\n", sampleRate );
-        printf("encode quality mode index: %s\n", eqmiToString(eqmi) );
+        fprintf(stderr, "current settings:\n");
+        fprintf(stderr, "sample rate: %d\n", sampleRate );
+        fprintf(stderr, "encode quality mode index: %s\n", eqmiToString(eqmi) );
 
         do
         {    
             const char *fileName = args[optind];
             char outFileName[255] = { 0 };
-            strncpy( outFileName, basename( fileName ), 254 );
-            strip_ext( outFileName );
-            strcat( outFileName, ".ldac" );
+            FILE* out = NULL;
+            if(!strcmp(output, "-"))
+            {
+                out = stdout;
+                strncpy(outFileName, "<stdout>", 254);
+            }
+            else if (strlen(output) > 0)
+            {
+                strncpy(outFileName, output, 254);
+                strip_ext(outFileName);
+                strcat(outFileName, ".ldac");
+            }
+            else if (strcmp(fileName, "-"))
+			{
+                strncpy( outFileName, basename( fileName ), 254 );
+                strip_ext( outFileName );
+                strcat( outFileName, ".ldac" );
+			}
 
-            printf("convert: \"%s\" -> \"%s\" ", fileName, outFileName );
+            fprintf(stderr, "convert: \"%s\" -> \"%s\" ", fileName, outFileName );
             SNDFILE *in = NULL;
             SF_INFO sfinfo = { 0 };
             in = sf_open( fileName, SFM_READ, &sfinfo );
             if( in == NULL )
             {
-                printf("sndfile: can't open file: %s\n", sf_strerror( NULL ) );
+                fprintf(stderr, "sndfile: can't open file: %s\n", sf_strerror( NULL ) );
                 return EXIT_FAILURE;
             }
-            
-            FILE *out = fopen( outFileName, "wb" );
+            if( out == NULL ) out = fopen( outFileName, "wb" );
             if( out == NULL )
             {
                 perror("can't open output file!");
@@ -389,7 +412,7 @@ int main( int argc, char *args[] )
                 do_ldac_resample( in, &sfinfo, sampleRate, out, eqmi );
             } else
             {
-                printf( "not supported sample frequency (%dHz)\n", sfinfo.samplerate );
+                fprintf(stderr,  "not supported sample frequency (%dHz)\n", sfinfo.samplerate );
             }
 
             fclose( out );

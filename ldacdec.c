@@ -18,13 +18,13 @@ SNDFILE *openAudioFile( const char *fileName, int freq, int channels )
         .channels = channels,
         .format = SF_FORMAT_WAV | SF_FORMAT_PCM_16,
     };
-    printf("opening \"%s\" for writing ...\n", fileName );
-    printf("sampling frequency: %d\n", freq );
-    printf("channel count:      %d\n", channels );
+    fprintf(stderr, "opening \"%s\" for writing ...\n", fileName );
+    fprintf(stderr, "sampling frequency: %d\n", freq );
+    fprintf(stderr, "channel count:      %d\n", channels );
     SNDFILE *out = sf_open( fileName, SFM_WRITE, &sfinfo );
     if( out == NULL )
     {
-        printf("can't open output: %s\n", sf_strerror( NULL ) );
+        fprintf(stderr, "can't open output: %s\n", sf_strerror( NULL ) );
         return NULL;
     }
     return out;
@@ -38,7 +38,7 @@ int main(int argc, char *args[] )
 {
     if( argc < 2 )
     {
-        printf("usage:\n\t%s <input> <output, optional>\n", args[0] );
+        fprintf(stderr, "usage:\n\t%s [input] [output]\n", args[0] );
         return EXIT_SUCCESS;
     }
     const char *inputFile = args[1];
@@ -47,12 +47,12 @@ int main(int argc, char *args[] )
     if( argc > 2 )
         audioFile = args[2];
 
-    printf("opening \"%s\" ...\n", inputFile );
+    fprintf(stderr, "opening \"%s\" ...\n", inputFile );
 
     ldacdec_t dec;
     ldacdecInit( &dec );
 
-    FILE *in = fopen( inputFile, "rb" );
+    FILE *in = strcmp(inputFile, "-") == 0 ? stdin : fopen( inputFile, "rb" );
     if( in == NULL )
     {
         perror("can't open stream file");
@@ -95,7 +95,7 @@ int main(int argc, char *args[] )
         LOG_ARRAY( pcm, "%4d, " );
         if( out == NULL )
         {
-            printf("auto detect format!\n");
+            fprintf(stderr, "auto detect format!\n");
             out = openAudioFile( audioFile, ldacdecGetSampleRate( &dec ), ldacdecGetChannelCount( &dec ) ); 
             if( out == NULL )
                 return EXIT_FAILURE;
@@ -105,7 +105,7 @@ int main(int argc, char *args[] )
         filePosition += bytesUsed;
     }
 
-    printf("done.\n");
+    fprintf(stderr, "done.\n");
 
     sf_close( out );
     fclose(in);
