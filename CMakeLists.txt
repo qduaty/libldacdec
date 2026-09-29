@@ -28,9 +28,16 @@ add_definitions(-DVERSION="${GIT_VERSION}")
 include_directories(
     libldac/inc
     libldac/src
+)
+
+if(WIN32)
+include_directories(
     ../getopt-win/src
 )
 
+endif()
+
+# --- ASAN ---
 if(ASAN)
     add_compile_options(-fsanitize=address)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
@@ -57,7 +64,11 @@ if(!WIN32)
         SOVERSION 1
     )
 endif()
+if(WIN32)
 target_link_libraries(ldac)
+else()
+target_link_libraries(ldac m)
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED sndfile)

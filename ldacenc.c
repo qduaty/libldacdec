@@ -6,8 +6,16 @@
 
 #include <samplerate.h>
 #include <sndfile.h>
-
+#ifdef _WIN32
+#include <Shlwapi.h>
+int basename(char* path)
+{
+	return PathFindFileName(path);
+}
+typedef SSIZE_T ssize_t;
+#else
 #include <unistd.h>
+#endif // _WIN32
 #include <getopt.h>
 
 #include <string.h>
@@ -17,7 +25,11 @@
 void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
 {
     const int channels = info->channels;
+#if __STDC_NO_VLA__
+    float *pcmSamples = _malloca(128 * channels * sizeof(float));
+#else
     float pcmSamples[128*channels];
+#endif
     int pcm_used = 0;
     uint8_t ldacFrame[1024] = { 0 };
     int ldac_stream_size = 0;
@@ -32,7 +44,6 @@ void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
     if( ret < 0 )
     {
         fprintf(stderr, "ldacBT_init_handler_encode failed! error code %d\n", ldacBT_get_error_code( h ) );
-		free(pcmSamples);
         return;
     }
     size_t frameCount = 0;
@@ -296,8 +307,8 @@ static void usage( char *progName )
 {
     int i;
     printVersion();
-    fprintf(stderr,  "\nusage:\n" );
-    fprintf(stderr,  "%s [options] <filename>\n\n", progName );
+    fprintf(stderr, "\nusage:\n" );
+    fprintf(stderr, "%s [options] <filename>\n\n", progName );
     for( i=0; long_options[i].name != 0; i++)
     {
         fprintf(stderr, "--%s|-%c\t\t%s\n", long_options[i].name, long_options[i].val, help_options[i] );
