@@ -6,8 +6,8 @@ Use *vcpkg* to install *libsndfile* and *libsamplerate* visible to cmake on Wind
 #### Known issue
 Cmake under Linux will overwrite the original Makefile.
 #### Foobar2000 configuration options
-<img src="readme pics/foobar encoding.png">
-<img src="readme pics/foobar decoding.png">
+<img src="readme pics/foobar encoding.png" width="42%">
+<img src="readme pics/foobar decoding.png" width="56%">
 
 # LDAC decoder
 

@@ -78,7 +78,11 @@ typedef struct {
 } ldacdec_t;
 
 int ldacdecInit( ldacdec_t *this );
-int ldacDecode( ldacdec_t *this, uint8_t *stream, int16_t *pcm, int *bytesUsed );
+typedef enum {
+	SAMPLE_TYPE_SHORT,
+	SAMPLE_TYPE_FLOAT
+} SampleType;
+int ldacDecode( ldacdec_t *this, uint8_t *stream, void *pcm, int *bytesUsed, SampleType type);
 int ldacNullPacket( ldacdec_t *this, uint8_t *output, int *bytesUsed );
 int ldacdecGetSampleRate( ldacdec_t *this );
 int ldacdecGetChannelCount( ldacdec_t *this );

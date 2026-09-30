@@ -404,6 +404,18 @@ static void pcmFloatToShort( frame_t *this, int16_t *pcmOut )
     }
 }
 
+static void pcmFloatToFloat( frame_t *this, float *pcmOut )
+{
+    int i=0;
+    for(int smpl=0; smpl<this->frameSamples; ++smpl )
+    {
+        for( int ch=0; ch<this->channelCount; ++ch, ++i )
+        {
+            pcmOut[i] = this->channels[ch].pcm[smpl] / 32768.0f;
+        }
+    }
+}
+
 static const int channelConfigIdToChannelCount[] = { 1, 2, 2 };
 
 int ldacdecGetChannelCount( ldacdec_t *this )
@@ -450,7 +462,7 @@ static int decodeFrame( frame_t *this, BitReaderCxt *br )
     return 0;
 }
 
-int ldacDecode( ldacdec_t *this, uint8_t *stream, int16_t *pcm, int *bytesUsed )
+int ldacDecode( ldacdec_t *this, uint8_t *stream, void* pcm, int* bytesUsed, SampleType type)
 {
     BitReaderCxt brObject;
     BitReaderCxt *br = &brObject;
@@ -483,8 +495,10 @@ int ldacDecode( ldacdec_t *this, uint8_t *stream, int16_t *pcm, int *bytesUsed )
             RunImdct( &channel->mdct, channel->spectra, channel->pcm );
         }
         AlignPosition( br, 8 );
-
-        pcmFloatToShort( frame, pcm );
+		if (type == SAMPLE_TYPE_FLOAT)
+			pcmFloatToFloat(frame, pcm);
+		else
+            pcmFloatToShort( frame, pcm );
     }
     AlignPosition( br, (frame->frameLength)*8 + 24 );
 
