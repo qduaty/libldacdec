@@ -10,6 +10,7 @@
 #include "ldacdec.h"
 
 #include "sndfile.h"
+#include "miniwav.h"
 
 SNDFILE *openAudioFile( const char *fileName, int freq, int channels, int floatOutput )
 {
@@ -78,6 +79,11 @@ int main(int argc, char * args[] )
     size_t filePosition = 0;
     int blockId = 0;
     int bytesInBuffer = 0;
+
+	WavLdacInfo info = { 0 };
+    if (parseWavLdac(in, &info) == 0) {
+        filePosition = info.dataOffset;
+    }
     while(1)
     {
         LOG("%ld =>\n", filePosition );

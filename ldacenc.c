@@ -21,8 +21,9 @@ typedef SSIZE_T ssize_t;
 #include <string.h>
 
 #include "ldacBT.h"
+#include  "miniwav.h"
 
-void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
+void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid, size_t *totalFrames)
 {
     const int channels = info->channels;
 #if __STDC_NO_VLA__
@@ -54,6 +55,7 @@ void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
         
         int count = sf_readf_float( in, pcmSamples, 128 );
         frameCount += count;
+        *totalFrames += count;
         
         // pad samples in case we can't fill all at the end of file
         if( count < 128 )
@@ -79,7 +81,7 @@ void do_ldac(SNDFILE *in, SF_INFO *info, FILE *out, int eqmid )
     ldacBT_close_handle(h);
 }
 
-void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out, int eqmid )
+void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out, int eqmid, size_t* totalFrames)
 {
     // resampling
     int converter = SRC_SINC_BEST_QUALITY;
@@ -160,6 +162,7 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
         if (src_data.input_frames == 0)
         {   
             src_data.input_frames = sf_readf_float (in, pcmSamples, bufFrames) ;
+			totalFrames += src_data.input_frames;
             src_data.data_in = pcmSamples;
             frameCount += src_data.input_frames;
             /* The last read will not be a full buffer, so snd_of_input. */
@@ -208,13 +211,14 @@ void do_ldac_resample(SNDFILE *in, SF_INFO *info, int new_sample_rate, FILE *out
 }
 
 
-static char short_options[] = "hr:q:o:v";
+static char short_options[] = "hr:q:o:wv";
 
 static struct option long_options[] = {
     {"help",        no_argument,        NULL,   'h'},
     {"rate",        required_argument,  NULL,   'r'},
     {"eqmi",        required_argument,  NULL,   'q'},
     {"output",      required_argument,  NULL,   'o'},
+	{"wav",         no_argument,        NULL,   'w'},
     {"version",     no_argument,        NULL,   'v'},
 
     {0, 0, 0, 0}
@@ -225,6 +229,7 @@ static char *help_options[] = {
     "sample rate of encoded stream",
     "encode quality mode index",
     "output file name (- for stdout)",
+	"produce wav file instead of raw ldac stream",
     "print version",
 };
 
@@ -327,6 +332,7 @@ int main( int argc, char *args[] )
     int sampleRate = -1;
     int eqmi = LDACBT_EQMID_HQ;
 	char output[255] = { 0 };
+	int outputWav = 0;
 
     int c;
     while( (c = getopt_long( argc, args, short_options, long_options, NULL )) > 0 )
@@ -344,7 +350,6 @@ int main( int argc, char *args[] )
                 break;
 
             case 'q':
-				fprintf(stderr, "encode quality mode index: %s\n", optarg);
                 eqmi = atoi(optarg);
                 if( !eqmiSupported( eqmi ) )
                 {
@@ -354,6 +359,10 @@ int main( int argc, char *args[] )
                 }
                 break;
             
+			case 'w':
+				outputWav = 1;
+				break;
+
             case 'v':
                 printVersion();
                 break;
@@ -370,6 +379,8 @@ int main( int argc, char *args[] )
         }
     }
 
+	const char* outExt = outputWav ? ".wav" : ".ldac";
+
     if( optind < argc )
     {
         fprintf(stderr, "current settings:\n");
@@ -381,6 +392,8 @@ int main( int argc, char *args[] )
             const char *fileName = args[optind];
             char outFileName[255] = { 0 };
             FILE* out = NULL;
+			int dataOffset = 0;
+			size_t totalFrames = 0;
             if(!strcmp(output, "-"))
             {
                 out = stdout;
@@ -390,13 +403,13 @@ int main( int argc, char *args[] )
             {
                 strncpy(outFileName, output, 254);
                 strip_ext(outFileName);
-                strcat(outFileName, ".ldac");
+                strcat(outFileName, outExt);
             }
             else if (strcmp(fileName, "-"))
 			{
                 strncpy( outFileName, basename( fileName ), 254 );
                 strip_ext( outFileName );
-                strcat( outFileName, ".ldac" );
+                strcat( outFileName, outExt );
 			}
 
             fprintf(stderr, "convert: \"%s\" -> \"%s\" ", fileName, outFileName );
@@ -415,15 +428,26 @@ int main( int argc, char *args[] )
                 return EXIT_FAILURE;
             }
 
+            if(outputWav)
+            {
+				dataOffset = writeWavLdacHeader(out, sfinfo.channels, sfinfo.samplerate); // FIXME will write empty file if parameters are not supported
+            }
+
             if( (sampleRate < 0) && sampleRateSupported( sfinfo.samplerate ) )
             {
-                do_ldac( in, &sfinfo, out, eqmi ); 
+                do_ldac( in, &sfinfo, out, eqmi, &totalFrames);
             } else if( (sampleRate > 0) && (sampleRate != sfinfo.samplerate) )
             {
-                do_ldac_resample( in, &sfinfo, sampleRate, out, eqmi );
+                do_ldac_resample( in, &sfinfo, sampleRate, out, eqmi, &totalFrames);
             } else
             {
                 fprintf(stderr,  "not supported sample frequency (%dHz)\n", sfinfo.samplerate );
+            }
+
+            if (outputWav)
+            {
+				long dataSize = ftell(out) - dataOffset;
+                updateWavLdacHeader(out, sfinfo.samplerate, totalFrames, dataSize);
             }
 
             fclose( out );

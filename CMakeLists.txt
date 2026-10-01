@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 set(ENV{PKG_CONFIG_PATH} "C:/dev/external/vcpkg/installed/x64-windows/lib/pkgconfig")
 
-project(ldac_tools C)
+project(ldac_tools C CXX)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 
 option(ASAN "Enable AddressSanitizer" OFF)
 
@@ -80,6 +81,7 @@ set(LDACENC_SRC
     ldacenc.c
     libldac/src/ldaclib.c
     libldac/src/ldacBT.c
+    miniwav.cpp
 )
 
 if(WIN32)
@@ -102,7 +104,10 @@ target_include_directories(ldacenc PRIVATE
     ${SAMPLERATE_INCLUDE_DIRS}
 )
 
-add_executable(ldacdec ldacdec.c)
+add_executable(ldacdec 
+    ldacdec.c
+    miniwav.cpp
+)
 
 target_link_libraries(ldacdec
     ldac
