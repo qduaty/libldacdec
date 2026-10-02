@@ -7,6 +7,14 @@ extern "C" {
 
 #pragma pack(push, 1)
 
+struct ID3V2Header {
+	char chunkId[3] = { 'I','D','3' };
+	uint8_t majorVersion = 3;
+	uint8_t minorVersion = 0;
+	uint8_t flags = 0;
+	uint32_t size = 0; // size of the ID3v2 tag excluding the header
+};
+
 struct RiffHeader {
     char     chunkId[4] = { 'R','I','F','F' };
     uint32_t chunkSize = 0;
@@ -118,13 +126,26 @@ int parseWavLdac(FILE* f, WavLdacInfo* info)
 		fprintf(stderr, "Invalid file pointer or info pointer\n");
         return -1; 
     }
-	auto filePos = ftell(f);
+
+    auto initialPos = ftell(f);
+    // skip ID3 tag if present
+    ID3V2Header id3{};
+    if (fread(&id3, sizeof(id3), 1, f) != 1) { return -1; }
+    if (!memcmp("ID3", id3.chunkId, 3)) {
+	    // convert size from synch-safe integer
+    	uint32_t size = ((id3.size & 0x7F000000) >> 24) | ((id3.size & 0x007F0000) >> 9) | ((id3.size & 0x00007F00) << 6) | ((id3.size & 0x0000007F) << 21);
+        fseek(f, size, SEEK_CUR); // skip ID3v2 tag)
+    }
+    else {
+        fseek(f, initialPos, SEEK_SET); // rewind if no ID3v2 tag)
+    }
+
     RiffHeader riff{};
     if (fread(&riff, sizeof(riff), 1, f) != 1) { return -1; }
 
     if (std::string(riff.chunkId, 4) != "RIFF" ||
         std::string(riff.format, 4) != "WAVE") {
-		// fprintf(stderr, "Not a valid WAV file: invalid RIFF header\n");
+        fprintf(stderr, "Not a valid WAV file: invalid RIFF header\n");
         return -1;
     }
 
@@ -136,7 +157,7 @@ int parseWavLdac(FILE* f, WavLdacInfo* info)
     do {
 		char chunkId[4];
 		fread(chunkId, sizeof(chunkId), 1, f);
-		if (!strncmp(chunkId, "fmt ", 4)) {
+        if (!memcmp(chunkId, "fmt ", 4)) {
             fprintf(stderr, "Found fmt chunk\n");
             fseek(f, -4, SEEK_CUR);
             if (fread(&fmt, sizeof(fmt), 1, f) != 1) { return -1; }
@@ -146,15 +167,15 @@ int parseWavLdac(FILE* f, WavLdacInfo* info)
             }
             allRead++;
 			fseek(f, fmt.chunkSize + 8 - sizeof(FmtChunkExtensible), SEEK_CUR);
-		}
-        else if(!strncmp(chunkId, "fact", 4)) {
+        }
+        else if(!memcmp(chunkId, "fact", 4)) {
 			fprintf(stderr, "Found fact chunk\n");
 			fseek(f, -4, SEEK_CUR);
             if (fread(&fact, sizeof(fact), 1, f) != 1) { return -1; }
 			allRead++;
             fseek(f, fact.chunkSize + 8 - sizeof(FactChunk), SEEK_CUR);
         }
-        else if(!strncmp(chunkId, "data", 4)) {
+        else if(!memcmp(chunkId, "data", 4)) {
 			fprintf(stderr, "Found data chunk\n");
 			fseek(f, -4, SEEK_CUR);
             if (fread(&data, sizeof(data), 1, f) != 1) { return -1; }
